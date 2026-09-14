@@ -6,6 +6,7 @@ import hashlib
 import json
 import shutil
 import time
+import zipfile
 from dataclasses import asdict
 from pathlib import Path
 from typing import Any, Callable, Iterable
@@ -202,6 +203,43 @@ def _mesh_preview(size: tuple[int, int], polygons: list[list[tuple[int, int]]], 
     return preview
 
 
+def _write_stage_folders(target: Path) -> dict[str, list[str]]:
+    """Create traceable stage folders without removing the convenient flat exports."""
+    stage_files = {
+        "01_original": ["original.png"],
+        "02_background_removed": ["background_removed.png"],
+        "03_threshold": ["threshold.png"],
+        "04_cleaned_mask": ["cleaned_mask.png"],
+        "05_contours": ["contours.png"],
+        "06_polygon": ["polygon.png", "vector.svg"],
+        "07_mesh": ["mesh.png", "model.obj", "model.stl"],
+        "08_final": ["final_preview.png", "settings.json"],
+    }
+    manifest_stages = {}
+    stages_dir = target / "stages"
+    for stage_name, filenames in stage_files.items():
+        stage_dir = stages_dir / stage_name
+        stage_dir.mkdir(parents=True, exist_ok=True)
+        copied = []
+        for filename in filenames:
+            source = target / filename
+            if source.is_file():
+                shutil.copy2(source, stage_dir / filename)
+                copied.append(filename)
+        manifest_stages[stage_name] = copied
+    return manifest_stages
+
+
+def _write_export_archive(target: Path) -> str:
+    archive_name = f"{target.name}_exports.zip"
+    archive_path = target / archive_name
+    with zipfile.ZipFile(archive_path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        for path in sorted(target.rglob("*")):
+            if path.is_file() and path != archive_path and ".cache_key" not in path.parts:
+                archive.write(path, Path(target.name) / path.relative_to(target))
+    return archive_name
+
+
 def _write_meshes(directory: Path, polygons: list[list[tuple[int, int]]], depth: float, write_obj: bool, write_stl: bool) -> list[str]:
     outputs = []
     if not polygons:
@@ -263,7 +301,15 @@ def process_image(item: ImageItem, global_config: PipelineConfig, output_root: s
     cache_key = hashlib.sha256((record["source_sha256"] + config_hash(config)).encode()).hexdigest()
     cache_file = target / ".cache_key"
     if not force and cache_file.exists() and cache_file.read_text(encoding="utf-8") == cache_key and (target / "settings.json").exists():
+        record["stage_directories"] = _write_stage_folders(target)
+        archive_name = _write_export_archive(target)
+        record["export_directory"] = str(target)
+        record["export_archive"] = archive_name
         record["outputs"] = sorted(path.name for path in target.iterdir() if path.is_file() and not path.name.startswith("."))
+        if archive_name not in record["outputs"]:
+            record["outputs"].append(archive_name)
+        (target / "settings.json").write_text(json.dumps(record, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        record["export_archive"] = _write_export_archive(target)
         record["status"] = "Completed (cached)"
         if on_stage:
             on_stage("Completed (cached)")
@@ -348,6 +394,12 @@ def process_image(item: ImageItem, global_config: PipelineConfig, output_root: s
     record["duration_seconds"] = round(time.time() - started, 3)
     if on_stage:
         on_stage("Final Preview")
+    (target / "settings.json").write_text(json.dumps(record, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    record["stage_directories"] = _write_stage_folders(target)
+    record["export_directory"] = str(target)
+    record["export_archive"] = _write_export_archive(target)
+    if record["export_archive"] not in record["outputs"]:
+        record["outputs"].append(record["export_archive"])
     (target / "settings.json").write_text(json.dumps(record, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     cache_file.write_text(cache_key, encoding="utf-8")
     return record
