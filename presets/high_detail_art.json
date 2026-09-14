@@ -1,0 +1,33 @@
+{
+  "parameters": {
+    "adaptive_block_size": 31,
+    "adaptive_offset": 5,
+    "background_removal": true,
+    "bevel": 0.4,
+    "blur": 0,
+    "contrast": 1.15,
+    "denoise": 1,
+    "detail_preservation": "high",
+    "export_glb": false,
+    "export_obj": true,
+    "export_png": true,
+    "export_stl": true,
+    "export_svg": true,
+    "extrusion_depth": 6.0,
+    "grayscale": true,
+    "invert": false,
+    "mesh_resolution": 1,
+    "minimum_contour_size": 15,
+    "morphology": 1,
+    "orientation": "front",
+    "polygon_repair": true,
+    "random_seed": 12345,
+    "scale": 1.0,
+    "simplification": 0.8,
+    "stroke_preservation": true,
+    "threshold": 142,
+    "threshold_type": "fixed"
+  },
+  "pipeline_version": "1.0",
+  "preset_name": "high_detail_art"
+}
